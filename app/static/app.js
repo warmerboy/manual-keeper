@@ -419,9 +419,10 @@ async function uploadFiles(fileList) {
       }
     }
     if (okItems.length > 5) lines.push(`...等共 ${okItems.length} 份`);
-    if (warns.length) lines.push(`ⓘ ${warns.join("；")}`);
+    if (warns.length) lines.push(`⚠ ${warns.join("；")}`);
 
-    updateProgressCard(card, "done", lines.join("\n"));
+    const hasError = warns.some(w => w.startsWith("AI 识别失败"));
+    updateProgressCard(card, hasError ? "error" : "done", lines.join("\n"));
     card._scheduleDismiss(10000); // 10 秒后自动淺出，鼠标悬停暂停
 
     await loadTree(); await loadList();

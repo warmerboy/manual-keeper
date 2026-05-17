@@ -67,9 +67,11 @@ async def upload_files(files: List[UploadFile] = File(...)):
             warn = []
             if not (CONFIG.get("anthropic_api_key") or "").strip():
                 warn.append("未配置 ANTHROPIC_API_KEY，仅完成上传，未自动识别")
+            if classified.get("_error"):
+                warn.append(f"AI 识别失败：{classified['_error']}")
             if extracted["type"] == "image" and not ocr.available():
                 warn.append("Tesseract OCR 未安装，图片暂无法识别文字")
-            if needs_review and (CONFIG.get("anthropic_api_key") or "").strip():
+            if needs_review and (CONFIG.get("anthropic_api_key") or "").strip() and not classified.get("_error"):
                 warn.append(f"识别置信度较低（{confidence:.2f}），请人工确认分类")
 
             results.append({

@@ -126,7 +126,7 @@ def _empty_result() -> dict[str, Any]:
     return {
         "category": None, "subcategory": None, "vendor": None, "model": None,
         "doc_type": None, "title": None, "summary": None, "reorg_summary": None,
-        "tags": [], "confidence": 0.0,
+        "tags": [], "confidence": 0.0, "_error": None,
     }
 
 
@@ -163,7 +163,9 @@ def classify_text(
         )
     except Exception as e:
         print(f"[classify] Claude API 调用失败：{e}")
-        return _empty_result()
+        result = _empty_result()
+        result["_error"] = str(e)
+        return result
 
     for block in resp.content:
         if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == "classify":
