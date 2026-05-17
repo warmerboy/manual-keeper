@@ -371,6 +371,14 @@ window.addEventListener("DOMContentLoaded", () => {
   $("d-edit").onclick = () => detail._doc && openEdit(detail._doc);
   $("d-delete").onclick = deleteCurrent;
   $("d-download").onclick = () => state.currentId && window.open(`/file/${state.currentId}?download=1`);
+  $("d-new-tab").onclick = () => state.currentId && window.open(`/file/${state.currentId}`, "_blank");
+  $("d-open-local").onclick = async () => {
+    if (!state.currentId) return;
+    try {
+      await api(`/api/documents/${state.currentId}/open-local`, { method: "POST" });
+      toast("已用本地默认程序打开");
+    } catch (e) { toast("本地打开失败：" + e.message); }
+  };
   $("e-cancel").onclick = () => ($("modal-mask").hidden = true);
   $("e-save").onclick = saveEdit;
   // 点弹窗外的遮罩也能关闭
