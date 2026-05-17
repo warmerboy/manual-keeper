@@ -9,3 +9,4 @@ python-docx>=1.1
 pillow>=10.0
 pytesseract>=0.3
 beautifulsoup4>=4.12
+cos-python-sdk-v5>=1.9

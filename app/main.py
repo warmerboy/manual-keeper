@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import db, migrate
 from .config import CONFIG
-from .routers import documents, files, reorganize as reorganize_router, search, taxonomy as taxonomy_router, tree, upload
+from .routers import documents, files, reorganize as reorganize_router, search, share as share_router, taxonomy as taxonomy_router, tree, upload
 
 BASE = Path(__file__).resolve().parent
 
@@ -23,6 +23,7 @@ app.include_router(tree.router)
 app.include_router(files.router)
 app.include_router(taxonomy_router.router)
 app.include_router(reorganize_router.router)
+app.include_router(share_router.router)
 
 
 @app.on_event("startup")

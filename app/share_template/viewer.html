@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文档共享</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f7fa; color: #333; min-height: 100vh; }
+
+/* 登录页 */
+.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+.login-box { background: #fff; border-radius: 12px; padding: 40px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 360px; width: 100%; text-align: center; }
+.login-box h1 { font-size: 1.4em; margin-bottom: 8px; }
+.login-box p { color: #666; font-size: 0.9em; margin-bottom: 24px; }
+.login-box input { width: 100%; padding: 12px 16px; border: 1px solid #ddd; border-radius: 8px; font-size: 1em; margin-bottom: 16px; }
+.login-box input:focus { outline: none; border-color: #4a90d9; }
+.login-box button { width: 100%; padding: 12px; background: #4a90d9; color: #fff; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; }
+.login-box button:hover { background: #3a7bc8; }
+.login-error { color: #e74c3c; font-size: 0.85em; margin-top: 8px; display: none; }
+
+/* 主界面 */
+.app-wrap { display: none; max-width: 1100px; margin: 0 auto; padding: 20px; }
+.app-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.app-header h1 { font-size: 1.3em; white-space: nowrap; }
+.search-box { flex: 1; min-width: 200px; padding: 10px 16px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95em; }
+.search-box:focus { outline: none; border-color: #4a90d9; }
+
+/* 分类标签 */
+.category-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.cat-tab { padding: 6px 14px; border-radius: 20px; background: #e8ecf0; font-size: 0.85em; cursor: pointer; border: none; transition: all 0.2s; }
+.cat-tab:hover { background: #d0d8e0; }
+.cat-tab.active { background: #4a90d9; color: #fff; }
+.cat-tab .count { margin-left: 4px; opacity: 0.7; }
+
+/* 文档列表 */
+.doc-list { display: grid; gap: 12px; }
+.doc-card { background: #fff; border-radius: 10px; padding: 16px 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16px; cursor: pointer; transition: box-shadow 0.2s; }
+.doc-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+.doc-icon { width: 40px; height: 40px; border-radius: 8px; background: #e8f0fe; display: flex; align-items: center; justify-content: center; font-size: 1.2em; flex-shrink: 0; }
+.doc-info { flex: 1; min-width: 0; }
+.doc-title { font-weight: 600; font-size: 0.95em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-meta { font-size: 0.8em; color: #888; margin-top: 4px; }
+.doc-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+.doc-tag { font-size: 0.75em; background: #f0f4f8; color: #555; padding: 2px 8px; border-radius: 10px; }
+.doc-size { font-size: 0.8em; color: #999; white-space: nowrap; }
+.empty-msg { text-align: center; color: #999; padding: 60px 20px; font-size: 0.95em; }
+</style>
+</head>
+<body>
+
+<!-- 登录页 -->
+<div class="login-wrap" id="loginPage">
+  <div class="login-box">
+    <h1>文档共享</h1>
+    <p>请输入访问口令</p>
+    <input type="password" id="pwdInput" placeholder="口令" autocomplete="off">
+    <button onclick="doLogin()">进入</button>
+    <div class="login-error" id="loginErr">口令不正确</div>
+  </div>
+</div>
+
+<!-- 主界面 -->
+<div class="app-wrap" id="appPage">
+  <div class="app-header">
+    <h1>文档共享</h1>
+    <input class="search-box" id="searchInput" placeholder="搜索标题、标签..." oninput="doFilter()">
+  </div>
+  <div class="category-tabs" id="categoryTabs"></div>
+  <div class="doc-list" id="docList"></div>
+</div>
+
+<script>
+let DATA = null;
+let currentCategory = null;
+
+async function loadManifest() {
+  const resp = await fetch('manifest.json?' + Date.now());
+  DATA = await resp.json();
+  return DATA;
+}
+
+function sha256(str) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  return crypto.subtle.digest('SHA-256', data).then(buf => {
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  });
+}
+
+async function doLogin() {
+  const pwd = document.getElementById('pwdInput').value;
+  const manifest = await loadManifest();
+
+  if (!manifest.password_hash) {
+    showApp();
+    return;
+  }
+
+  const hash = await sha256(pwd);
+  if (hash === manifest.password_hash) {
+    showApp();
+  } else {
+    document.getElementById('loginErr').style.display = 'block';
+  }
+}
+
+document.getElementById('pwdInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+function showApp() {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('appPage').style.display = 'block';
+  renderCategories();
+  renderList();
+}
+</script>
+<script>
+function renderCategories() {
+  const cats = {};
+  DATA.documents.forEach(d => {
+    const c = d.category || '未分类';
+    cats[c] = (cats[c] || 0) + 1;
+  });
+
+  let html = `<button class="cat-tab active" onclick="filterCat(null)">全部<span class="count">${DATA.documents.length}</span></button>`;
+  Object.entries(cats).sort((a, b) => b[1] - a[1]).forEach(([cat, count]) => {
+    html += `<button class="cat-tab" onclick="filterCat('${cat}')">${cat}<span class="count">${count}</span></button>`;
+  });
+  document.getElementById('categoryTabs').innerHTML = html;
+}
+
+function filterCat(cat) {
+  currentCategory = cat;
+  document.querySelectorAll('.cat-tab').forEach((el, i) => {
+    el.classList.toggle('active', cat === null ? i === 0 : el.textContent.startsWith(cat));
+  });
+  renderList();
+}
+
+function doFilter() {
+  renderList();
+}
+
+function getFilteredDocs() {
+  const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+  let docs = DATA.documents;
+  if (currentCategory) {
+    docs = docs.filter(d => (d.category || '未分类') === currentCategory);
+  }
+  if (q) {
+    docs = docs.filter(d => {
+      const text = [d.title, d.original_name, d.vendor, d.model, d.summary, ...(d.tags || [])].join(' ').toLowerCase();
+      return text.includes(q);
+    });
+  }
+  return docs;
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function mimeIcon(mime) {
+  if (!mime) return '📄';
+  if (mime.startsWith('image/')) return '🖼️';
+  if (mime.includes('pdf')) return '📕';
+  if (mime.includes('word') || mime.includes('docx')) return '📘';
+  return '📄';
+}
+
+function renderList() {
+  const docs = getFilteredDocs();
+  if (docs.length === 0) {
+    document.getElementById('docList').innerHTML = '<div class="empty-msg">没有找到文档</div>';
+    return;
+  }
+  let html = '';
+  docs.forEach(d => {
+    const tags = (d.tags || []).slice(0, 4).map(t => `<span class="doc-tag">${t}</span>`).join('');
+    const meta = [d.vendor, d.model, d.doc_type].filter(Boolean).join(' · ');
+    html += `
+      <div class="doc-card" onclick="window.open('${d.file_key}', '_blank')">
+        <div class="doc-icon">${mimeIcon(d.mime)}</div>
+        <div class="doc-info">
+          <div class="doc-title">${d.title || d.original_name}</div>
+          ${meta ? `<div class="doc-meta">${meta}</div>` : ''}
+          ${d.summary ? `<div class="doc-meta">${d.summary}</div>` : ''}
+          ${tags ? `<div class="doc-tags">${tags}</div>` : ''}
+        </div>
+        <div class="doc-size">${formatSize(d.size)}</div>
+      </div>`;
+  });
+  document.getElementById('docList').innerHTML = html;
+}
+</script>
+</body>
+</html>

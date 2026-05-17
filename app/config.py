@@ -13,6 +13,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "db_path": "./data/app.db",
     "min_confidence": 0.6,
     "tesseract_cmd": "",
+    "cos_secret_id": "",
+    "cos_secret_key": "",
+    "cos_region": "",
+    "cos_bucket": "",
+    "share_password": "",
 }
 
 ROOT = Path(__file__).resolve().parent.parent

@@ -93,6 +93,8 @@ def init_schema(c: sqlite3.Connection) -> None:
     c.executescript(SCHEMA)
     # 增量 schema 升级（ALTER TABLE，对老库幂等）
     _ensure_column(c, "documents", "reorg_summary", "TEXT")
+    _ensure_column(c, "documents", "hidden", "INTEGER DEFAULT 0")
+    _ensure_column(c, "documents", "shared_at", "TEXT")
     c.commit()
 
 
@@ -261,6 +263,7 @@ def get_tags(doc_id: int) -> list[str]:
 def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     d = dict(row)
     d["needs_review"] = bool(d.get("needs_review"))
+    d["hidden"] = bool(d.get("hidden"))
     return d
 
 
@@ -314,13 +317,14 @@ def update_document(doc_id: int, fields: dict[str, Any]) -> bool:
         "category", "subcategory", "vendor", "model", "doc_type",
         "title", "summary", "reorg_summary",
         "confidence", "needs_review", "stored_path",
+        "hidden", "shared_at",
     }
     sets = []
     args: list[Any] = []
     for k, v in fields.items():
         if k in allowed:
             sets.append(f"{k}=?")
-            args.append(int(v) if k == "needs_review" else v)
+            args.append(int(v) if k in ("needs_review", "hidden") else v)
     if not sets:
         return False
     sets.append("updated_at=?")
@@ -386,8 +390,74 @@ def category_tree() -> dict[str, Any]:
         n = r["n"]
         tree.setdefault(cat, {"__count": 0, "children": {}})
         tree[cat]["__count"] += n
-        # 没有细类时（如待归档），不在 children 里加项；细类显示完全由前端控制
         if sub:
             tree[cat]["children"].setdefault(sub, 0)
             tree[cat]["children"][sub] += n
     return tree
+
+
+def list_documents_for_share() -> list[dict[str, Any]]:
+    """返回所有非隐藏文档的完整信息（供同步到 COS 使用）。"""
+    rows = conn().execute(
+        "SELECT id, uuid, original_name, stored_path, mime, size, "
+        "category, subcategory, vendor, model, doc_type, title, summary, "
+        "confidence, needs_review, hidden, shared_at, created_at, updated_at "
+        "FROM documents WHERE IFNULL(hidden, 0) = 0 "
+        "ORDER BY category, subcategory, title"
+    ).fetchall()
+    result = []
+    for r in rows:
+        d = row_to_dict(r)
+        d["tags"] = get_tags(d["id"])
+        result.append(d)
+    return result
+
+
+def list_pending_sync() -> list[dict[str, Any]]:
+    """返回需要同步的文档（非隐藏且 shared_at 为空或早于 updated_at）。"""
+    rows = conn().execute(
+        "SELECT id, uuid, original_name, stored_path, mime, size, "
+        "category, subcategory, vendor, model, doc_type, title, summary, "
+        "confidence, needs_review, hidden, shared_at, created_at, updated_at "
+        "FROM documents WHERE IFNULL(hidden, 0) = 0 "
+        "AND (shared_at IS NULL OR updated_at > shared_at) "
+        "ORDER BY id"
+    ).fetchall()
+    result = []
+    for r in rows:
+        d = row_to_dict(r)
+        d["tags"] = get_tags(d["id"])
+        result.append(d)
+    return result
+
+
+def list_shared_hidden() -> list[dict[str, Any]]:
+    """返回已同步但现在被隐藏的文档（需要从 COS 删除）。"""
+    rows = conn().execute(
+        "SELECT id, uuid, original_name, stored_path "
+        "FROM documents WHERE IFNULL(hidden, 0) = 1 AND shared_at IS NOT NULL"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def mark_shared(doc_ids: list[int]) -> None:
+    """批量更新 shared_at 时间戳。"""
+    if not doc_ids:
+        return
+    now = _now()
+    with tx() as c:
+        c.executemany(
+            "UPDATE documents SET shared_at=? WHERE id=?",
+            [(now, did) for did in doc_ids],
+        )
+
+
+def clear_shared_at(doc_ids: list[int]) -> None:
+    """清除 shared_at（文档从 COS 删除后调用）。"""
+    if not doc_ids:
+        return
+    with tx() as c:
+        c.executemany(
+            "UPDATE documents SET shared_at=NULL WHERE id=?",
+            [(did,) for did in doc_ids],
+        )

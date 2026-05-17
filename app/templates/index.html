@@ -13,6 +13,7 @@
   <div class="brand">说明书保管箱</div>
   <input id="search-input" type="search" placeholder="搜索：标题 / 厂商 / 型号 / 内容 / 标签 ..." autocomplete="off">
   <div class="topbar-right">
+    <button id="btn-sync" class="chip-btn" title="同步非隐藏文件到腾讯云 COS 供访客浏览">☁ 同步分享</button>
     <button id="btn-undo-reorg" class="chip-btn" hidden title="回退上次重整">↶ 回退重整</button>
     <button id="btn-reorganize" class="chip-btn" title="让 AI 重新整理所有分类">✨ 一键重整</button>
     <button id="btn-review" class="chip-btn">待确认 <span id="review-count" class="badge">0</span></button>
@@ -44,6 +45,7 @@
       <div class="detail-header">
         <h2 id="d-title">—</h2>
         <div class="detail-actions">
+          <button id="d-hide" title="隐藏后不会同步到分享平台">隐藏</button>
           <button id="d-new-tab" title="在浏览器新标签页中打开（用浏览器全屏看）">新窗口</button>
           <button id="d-open-local" title="用系统默认程序打开（如 Adobe / Foxit）">本地打开</button>
           <button id="d-download">下载</button>

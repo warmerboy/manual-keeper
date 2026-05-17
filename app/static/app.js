@@ -184,7 +184,8 @@ function renderCards(items) {
   }
   items.forEach((doc) => {
     const card = document.createElement("div");
-    card.className = "card" + (doc.needs_review ? " review" : "") + (doc.id === state.currentId ? " active" : "");
+    const hiddenCls = doc.hidden ? " hidden-doc" : "";
+    card.className = "card" + (doc.needs_review ? " review" : "") + (doc.id === state.currentId ? " active" : "") + hiddenCls;
     card.onclick = () => showDetail(doc.id);
     const title = doc.title || doc.original_name;
     const metaBits = [
@@ -192,10 +193,11 @@ function renderCards(items) {
     ].filter(Boolean);
     const tagsHtml = (doc.tags || []).slice(0, 6).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("");
     const reviewBadge = doc.needs_review ? `<span class="tag warn">待确认</span>` : "";
+    const hiddenBadge = doc.hidden ? `<span class="tag hidden-tag">已隐藏</span>` : "";
     card.innerHTML = `
       <p class="card-title">${escapeHtml(title)}</p>
       <div class="card-meta">${metaBits.map(escapeHtml).join(" · ") || "<em>未分类</em>"}</div>
-      <div class="card-tags">${reviewBadge}${tagsHtml}</div>
+      <div class="card-tags">${hiddenBadge}${reviewBadge}${tagsHtml}</div>
     `;
     wrap.appendChild(card);
   });
@@ -235,6 +237,10 @@ async function showDetail(id) {
     document.querySelectorAll(".card").forEach((c, idx) => {
       if (state.cards[idx]?.id === id) c.classList.add("active");
     });
+    // 更新隐藏按钮状态
+    const hideBtn = $("d-hide");
+    hideBtn.textContent = doc.hidden ? "取消隐藏" : "隐藏";
+    hideBtn.title = doc.hidden ? "取消隐藏，下次同步时会上传到分享平台" : "隐藏后不会同步到分享平台";
     detail._doc = doc;
   } catch (e) { toast(e.message); }
 }
@@ -535,6 +541,37 @@ async function applyReorganize() {
   }
 }
 
+/* ---- 隐藏 / 同步分享 ---- */
+async function toggleHidden() {
+  const id = state.currentId;
+  if (!id || !detail._doc) return;
+  const newHidden = !detail._doc.hidden;
+  try {
+    await api(`/api/share/documents/${id}/hidden?hidden=${newHidden}`, { method: "PUT" });
+    toast(newHidden ? "已隐藏，下次同步时将从分享平台移除" : "已取消隐藏，下次同步时将上传");
+    await loadList();
+    await showDetail(id);
+  } catch (e) { toast(e.message); }
+}
+
+async function syncShare() {
+  const card = newProgressCard("正在同步到腾讯云 COS ...");
+  try {
+    const data = await api("/api/share/sync", { method: "POST" });
+    if (data.ok) {
+      const msg = `同步完成：上传 ${data.uploaded} 份，删除 ${data.deleted} 份，共享 ${data.total_shared} 份`;
+      updateProgressCard(card, "done", msg);
+    } else {
+      const errMsg = data.error || (data.errors || []).join("；") || "未知错误";
+      updateProgressCard(card, "error", `同步失败：${errMsg}`);
+    }
+    card._scheduleDismiss(8000);
+  } catch (e) {
+    updateProgressCard(card, "error", `同步失败：${e.message}`);
+    card._scheduleDismiss(8000);
+  }
+}
+
 /* ---- 工具 ---- */
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
@@ -548,6 +585,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("btn-upload").onclick = () => $("file-input").click();
   $("file-input").onchange = (e) => uploadFiles(e.target.files);
   $("btn-review").onclick = () => { setFilter({ type: "review" }); };
+  $("btn-sync").onclick = syncShare;
   $("btn-reorganize").onclick = openReorganize;
   $("btn-undo-reorg").onclick = undoReorganize;
   $("reorg-cancel").onclick = closeReorganize;
@@ -569,6 +607,7 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   $("d-edit").onclick = () => detail._doc && openEdit(detail._doc);
+  $("d-hide").onclick = toggleHidden;
   $("d-delete").onclick = deleteCurrent;
   $("d-download").onclick = () => state.currentId && window.open(`/file/${state.currentId}?download=1`);
   $("d-new-tab").onclick = () => state.currentId && window.open(`/file/${state.currentId}`, "_blank");

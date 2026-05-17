@@ -15,6 +15,7 @@ class DocumentUpdate(BaseModel):
     summary: str | None = None
     tags: list[str] | None = None
     needs_review: bool | None = None
+    hidden: bool | None = None
 
 
 class ClassifyResult(BaseModel):
@@ -45,6 +46,8 @@ class DocumentOut(BaseModel):
     summary: str | None = None
     confidence: float = 0.0
     needs_review: bool = True
+    hidden: bool = False
+    shared_at: str | None = None
     created_at: str
     updated_at: str
     tags: list[str] = []

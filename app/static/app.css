@@ -206,3 +206,7 @@ main {
 .reorg-footer { padding: 12px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
 .reorg-footer button { padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); background: #fff; }
 .reorg-footer .primary-btn { border: none; background: var(--accent); color: #fff; font-weight: 600; }
+
+/* ---- 隐藏文档样式 ---- */
+.card.hidden-doc { opacity: 0.5; }
+.tag.hidden-tag { background: #f3f4f6; color: #6b7280; }
