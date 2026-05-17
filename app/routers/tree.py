@@ -15,7 +15,7 @@ def tree():
     active_cats = taxonomy.get_active_categories()
 
     out = []
-    # 按 taxonomy 顺序输出 5 个大类（哪怕暂时是空的也展示，方便用户知道有这些大类）
+    # 按 taxonomy 顺序收集所有大类
     for cat in active_cats:
         node = raw.get(cat, {"__count": 0, "children": {}})
         children = [
@@ -24,7 +24,7 @@ def tree():
         ]
         out.append({"name": cat, "count": node["__count"], "children": children})
 
-    # 兜底：如果 DB 里出现了不在 5 个枚举内的旧大类（迁移前看到），也展示一下
+    # 兜底：如果 DB 里出现了不在枚举内的旧大类，也展示
     for cat, node in raw.items():
         if cat in active_cats:
             continue
@@ -33,5 +33,8 @@ def tree():
             for sub, count in sorted(node["children"].items())
         ]
         out.append({"name": cat, "count": node["__count"], "children": children})
+
+    # 按文件数量降序排列（数量多的排前面，空的排最后）
+    out.sort(key=lambda x: -x["count"])
 
     return {"tree": out}

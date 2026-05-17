@@ -74,9 +74,12 @@ function fadeAndRemove(card) {
 }
 
 /* ---- 分类树 ---- */
+let _categoryOrder = []; // 分类树顺序缓存（按文件数降序）
+
 async function loadTree() {
   try {
     const { tree } = await api("/api/tree");
+    _categoryOrder = tree.map(c => c.name);
     renderTree(tree);
     await refreshReviewBadge();
   } catch (e) { toast(e.message); }
@@ -182,8 +185,22 @@ function renderCards(items) {
     wrap.innerHTML = '<div class="empty">这里还没有内容。拖拽文件到任意位置即可上传。</div>';
     return;
   }
+
+  // 按分类树顺序排序：非隐藏按分类树顺序 → 标题；隐藏的沉底
+  const catIdx = (cat) => {
+    const i = _categoryOrder.indexOf(cat);
+    return i >= 0 ? i : 999;
+  };
+  const sorted = [...items].sort((a, b) => {
+    if (a.hidden !== b.hidden) return a.hidden ? 1 : -1;
+    const ca = catIdx(a.category), cb = catIdx(b.category);
+    if (ca !== cb) return ca - cb;
+    return (a.title || a.original_name || "").localeCompare(b.title || b.original_name || "", "zh");
+  });
+  state.cards = sorted;
+
   let lastGroup = null;
-  items.forEach((doc) => {
+  sorted.forEach((doc) => {
     // 分组分隔线：按一级分类分组
     const group = doc.hidden ? "__hidden__" : (doc.category || "未分类");
     if (group !== lastGroup) {
