@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>说明书保管箱</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div id="drop-overlay">松开鼠标即可上传到这里</div>
+
+<header class="topbar">
+  <div class="brand">说明书保管箱</div>
+  <input id="search-input" type="search" placeholder="搜索：标题 / 厂商 / 型号 / 内容 / 标签 ..." autocomplete="off">
+  <div class="topbar-right">
+    <button id="btn-review" class="chip-btn">待确认 <span id="review-count" class="badge">0</span></button>
+    <button id="btn-upload" class="primary-btn">+ 上传文件</button>
+    <input id="file-input" type="file" multiple hidden>
+  </div>
+</header>
+
+<main>
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <span>分类</span>
+      <button id="btn-refresh" title="刷新">⟳</button>
+    </div>
+    <div id="tree"></div>
+  </aside>
+
+  <section id="list">
+    <div id="list-toolbar">
+      <span id="list-title">全部文档</span>
+      <span id="list-count"></span>
+    </div>
+    <div id="cards"></div>
+  </section>
+
+  <section id="detail">
+    <div id="detail-empty" class="empty">在左侧选择一份资料以查看详情</div>
+    <div id="detail-content" hidden>
+      <div class="detail-header">
+        <h2 id="d-title">—</h2>
+        <div class="detail-actions">
+          <button id="d-download">下载</button>
+          <button id="d-edit">编辑</button>
+          <button id="d-delete" class="danger">删除</button>
+        </div>
+      </div>
+      <div class="meta-row">
+        <span class="badge gray" id="d-doc-type"></span>
+        <span class="meta-item" id="d-cat"></span>
+        <span class="meta-item" id="d-vendor"></span>
+        <span class="meta-item" id="d-model"></span>
+        <span class="meta-item" id="d-conf"></span>
+      </div>
+      <p id="d-summary" class="summary"></p>
+      <div id="d-tags" class="tags"></div>
+      <div id="d-preview" class="preview"></div>
+    </div>
+  </section>
+</main>
+
+<div id="upload-toast" class="toast" hidden></div>
+
+<!-- 编辑对话框 -->
+<div id="modal-mask" hidden>
+  <div id="modal-edit">
+    <h3>编辑分类与标签</h3>
+    <div class="form-grid">
+      <label>大类<input id="e-category"></label>
+      <label>细类<input id="e-subcategory"></label>
+      <label>厂商 / 发布方<input id="e-vendor"></label>
+      <label>型号 / 版本<input id="e-model"></label>
+      <label>文档类型<input id="e-doc_type"></label>
+      <label class="span-2">标题<input id="e-title"></label>
+      <label class="span-2">摘要<textarea id="e-summary" rows="3"></textarea></label>
+      <label class="span-2">标签（逗号或空格分隔）<input id="e-tags"></label>
+    </div>
+    <div class="modal-actions">
+      <button id="e-cancel">取消</button>
+      <button id="e-save" class="primary-btn">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
