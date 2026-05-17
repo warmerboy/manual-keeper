@@ -25,6 +25,54 @@ function toast(msg, dur = 3500) {
   toast._t = setTimeout(() => (el.hidden = true), dur);
 }
 
+/* ---- 上传进度卡片栈（多份并行可叠加） ---- */
+function newProgressCard(initialMsg) {
+  const stack = $("upload-progress");
+  const card = document.createElement("div");
+  card.className = "progress-card running";
+  card.innerHTML = `
+    <span class="mini-spinner"></span>
+    <span class="content"></span>
+  `;
+  card.querySelector(".content").textContent = initialMsg;
+
+  let dismissTimer = null;
+  let pendingMs = 0;
+  card._scheduleDismiss = (ms) => {
+    pendingMs = ms;
+    if (dismissTimer) clearTimeout(dismissTimer);
+    dismissTimer = setTimeout(() => fadeAndRemove(card), ms);
+  };
+  card.addEventListener("mouseenter", () => {
+    if (dismissTimer) { clearTimeout(dismissTimer); dismissTimer = null; }
+  });
+  card.addEventListener("mouseleave", () => {
+    if (!dismissTimer && pendingMs > 0) dismissTimer = setTimeout(() => fadeAndRemove(card), 2500);
+  });
+
+  stack.appendChild(card);
+  return card;
+}
+
+function updateProgressCard(card, status, msg) {
+  card.className = `progress-card ${status}`;
+  const iconMap = { running: '<span class="mini-spinner"></span>', done: '<span class="icon">✓</span>', error: '<span class="icon">⚠</span>' };
+  card.innerHTML = `
+    ${iconMap[status] || ''}
+    <span class="content"></span>
+    ${status !== 'running' ? '<button class="close" title="关闭">×</button>' : ''}
+  `;
+  card.querySelector(".content").textContent = msg;
+  const closeBtn = card.querySelector(".close");
+  if (closeBtn) closeBtn.onclick = () => fadeAndRemove(card);
+}
+
+function fadeAndRemove(card) {
+  if (card.classList.contains("fading")) return;
+  card.classList.add("fading");
+  setTimeout(() => card.remove(), 300);
+}
+
 /* ---- 分类树 ---- */
 async function loadTree() {
   try {
@@ -304,7 +352,9 @@ async function deleteCurrent() {
 async function uploadFiles(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length) return;
-  toast(`正在上传 ${files.length} 个文件，AI 自动识别中 ...`, 60000);
+  // 每批拖拽 = 一张独立进度卡片，多张能叠加；不会互相覆盖
+  const card = newProgressCard(`正在识别 ${files.length} 份文档 ...`);
+
   const fd = new FormData();
   files.forEach((f) => fd.append("files", f));
   try {
@@ -313,26 +363,29 @@ async function uploadFiles(fileList) {
     const failed = data.results.length - okItems.length;
     const warns = [...new Set(data.results.flatMap((r) => r.warnings || []))];
 
-    // 拼一份多行提示，让用户看到 AI 识别出了什么
-    const lines = [`已上传 ${okItems.length} 份资料${failed ? `（失败 ${failed}）` : ""}`];
+    const lines = [`已识别 ${okItems.length} 份${failed ? `（失败 ${failed}）` : ""}`];
     for (const r of okItems.slice(0, 5)) {
       const c = r.classification || {};
       const path = [c.category, c.subcategory, c.vendor, c.model].filter(Boolean).join(" / ");
       const tagStr = (c.tags || []).slice(0, 5).join("、");
       if (path) {
-        lines.push(`• ${c.title || r.filename}  →  ${path}${tagStr ? `  [${tagStr}]` : ""}`);
+        lines.push(`• ${c.title || r.filename}\n  → ${path}${tagStr ? `  [${tagStr}]` : ""}`);
       } else {
-        lines.push(`• ${r.filename}  →  未识别，已放入"待确认"`);
+        lines.push(`• ${r.filename} → 未识别，已放入"待归档"`);
       }
     }
     if (okItems.length > 5) lines.push(`...等共 ${okItems.length} 份`);
-    if (warns.length) lines.push(`提示：${warns.join("；")}`);
-    toast(lines.join("\n"), 10000);
+    if (warns.length) lines.push(`ⓘ ${warns.join("；")}`);
+
+    updateProgressCard(card, "done", lines.join("\n"));
+    card._scheduleDismiss(10000); // 10 秒后自动淺出，鼠标悬停暂停
 
     await loadTree(); await loadList();
-    // 自动选中最新上传的第一个文件，方便用户看到 AI 识别结果
     if (okItems.length) showDetail(okItems[0].id);
-  } catch (e) { toast("上传失败：" + e.message, 8000); }
+  } catch (e) {
+    updateProgressCard(card, "error", `上传失败：${e.message}`);
+    card._scheduleDismiss(10000);
+  }
 }
 
 async function refreshReviewBadge() {
