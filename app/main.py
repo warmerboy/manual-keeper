@@ -13,7 +13,7 @@ from .routers import documents, files, reorganize as reorganize_router, search, 
 
 BASE = Path(__file__).resolve().parent
 
-app = FastAPI(title="说明书保管箱", version="0.2.0")
+app = FastAPI(title="说明书保管箱", version="1.0.0")
 app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
 app.include_router(upload.router)
