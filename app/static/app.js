@@ -182,7 +182,18 @@ function renderCards(items) {
     wrap.innerHTML = '<div class="empty">这里还没有内容。拖拽文件到任意位置即可上传。</div>';
     return;
   }
+  let lastGroup = null;
   items.forEach((doc) => {
+    // 分组分隔线：按一级分类分组
+    const group = doc.hidden ? "__hidden__" : (doc.category || "未分类");
+    if (group !== lastGroup) {
+      const divider = document.createElement("div");
+      divider.className = "card-divider";
+      divider.textContent = doc.hidden ? "已隐藏" : group;
+      wrap.appendChild(divider);
+      lastGroup = group;
+    }
+
     const card = document.createElement("div");
     const hiddenCls = doc.hidden ? " hidden-doc" : "";
     card.className = "card" + (doc.needs_review ? " review" : "") + (doc.id === state.currentId ? " active" : "") + hiddenCls;

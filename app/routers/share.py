@@ -14,7 +14,8 @@ def toggle_hidden(doc_id: int, hidden: bool = True):
     doc = db.get_document(doc_id)
     if not doc:
         raise HTTPException(404, "文档不存在")
-    db.update_document(doc_id, {"hidden": hidden})
+    with db.tx() as c:
+        c.execute("UPDATE documents SET hidden=? WHERE id=?", (int(hidden), doc_id))
     return {"ok": True, "id": doc_id, "hidden": hidden}
 
 

@@ -211,3 +211,6 @@ main {
 .card.hidden-doc { opacity: 0.5; }
 .tag.hidden-tag { background: #f3f4f6; color: #6b7280; }
 .hidden-flag { display: inline-block; background: #fef2f2; color: #dc2626; font-size: 12px; padding: 3px 10px; border-radius: 6px; font-weight: 500; }
+
+/* ---- 列表分组分隔线 ---- */
+.card-divider { font-size: 11px; color: var(--text-soft); padding: 10px 4px 4px; margin-top: 4px; border-bottom: 1px solid var(--border); font-weight: 600; letter-spacing: 0.5px; }

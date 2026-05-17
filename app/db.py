@@ -292,7 +292,7 @@ def list_documents(
         sql += " AND IFNULL(model,'') = ?"; args.append(model)
     if needs_review is not None:
         sql += " AND needs_review = ?"; args.append(int(needs_review))
-    sql += " ORDER BY updated_at DESC LIMIT ?"
+    sql += " ORDER BY IFNULL(hidden,0) ASC, IFNULL(category,'') ASC, IFNULL(title, original_name) ASC LIMIT ?"
     args.append(limit)
     rows = conn().execute(sql, args).fetchall()
     result = []
