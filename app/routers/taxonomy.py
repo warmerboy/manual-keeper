@@ -11,13 +11,13 @@ router = APIRouter(prefix="/api/taxonomy", tags=["taxonomy"])
 
 @router.get("/categories")
 def list_categories():
-    return {"categories": tx.CATEGORIES, "unclassified": tx.UNCLASSIFIED}
+    return {"categories": tx.get_active_categories(), "unclassified": tx.UNCLASSIFIED}
 
 
 @router.get("/subcategories")
 def list_subcategories(category: str):
     """返回该大类下『已有用过的细类 ∪ 建议清单』，已有的排前面。"""
-    if category not in tx.CATEGORIES:
+    if category not in tx.get_active_categories():
         raise HTTPException(400, f"未知大类：{category}")
     if category == tx.UNCLASSIFIED:
         return {"category": category, "existing": [], "suggested": [], "all": []}

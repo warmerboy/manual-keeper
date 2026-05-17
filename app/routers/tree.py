@@ -12,10 +12,11 @@ router = APIRouter(prefix="/api", tags=["tree"])
 @router.get("/tree")
 def tree():
     raw = db.category_tree()  # {大类: {__count, children: {细类: count}}}
+    active_cats = taxonomy.get_active_categories()
 
     out = []
     # 按 taxonomy 顺序输出 5 个大类（哪怕暂时是空的也展示，方便用户知道有这些大类）
-    for cat in taxonomy.CATEGORIES:
+    for cat in active_cats:
         node = raw.get(cat, {"__count": 0, "children": {}})
         children = [
             {"name": sub, "count": count}
@@ -25,7 +26,7 @@ def tree():
 
     # 兜底：如果 DB 里出现了不在 5 个枚举内的旧大类（迁移前看到），也展示一下
     for cat, node in raw.items():
-        if cat in taxonomy.CATEGORIES:
+        if cat in active_cats:
             continue
         children = [
             {"name": sub, "count": count}

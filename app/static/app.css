@@ -119,3 +119,49 @@ main {
 .modal-actions { margin-top: 16px; text-align: right; display: flex; gap: 8px; justify-content: flex-end; }
 .modal-actions button { padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border); background: #fff; }
 .modal-actions .primary-btn { border: none; background: var(--accent); color: #fff; }
+
+/* ---- 一键重整对话框 ---- */
+#reorg-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
+  align-items: center; justify-content: center; z-index: 60;
+}
+#reorg-dialog {
+  background: #fff; border-radius: 12px; width: 880px; max-width: 95vw;
+  max-height: 88vh; display: flex; flex-direction: column; overflow: hidden;
+}
+.reorg-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 22px; border-bottom: 1px solid var(--border); }
+.reorg-header h3 { margin: 0; font-size: 16px; }
+.reorg-x { background: transparent; border: none; font-size: 22px; color: var(--text-soft); cursor: pointer; line-height: 1; }
+#reorg-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+.reorg-state { text-align: center; padding: 40px 20px; color: var(--text-soft); }
+.reorg-state p { margin: 8px 0; }
+.reorg-sub { font-size: 12px; }
+.reorg-err { color: var(--danger); font-size: 14px; }
+.spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; margin: 0 auto 12px; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.reorg-rationale { background: #f6f7fb; border-left: 3px solid var(--accent); padding: 10px 14px; font-size: 13px; line-height: 1.6; margin-bottom: 16px; border-radius: 4px; }
+.reorg-rationale strong { color: var(--accent); margin-right: 6px; }
+
+.reorg-cols { display: grid; grid-template-columns: 1fr 36px 1fr; gap: 12px; align-items: stretch; margin-bottom: 16px; }
+.reorg-col { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.reorg-col-title { font-size: 12px; color: var(--text-soft); margin-bottom: 6px; font-weight: 600; }
+.reorg-col ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; }
+.reorg-col li.added { color: var(--ok); font-weight: 600; }
+.reorg-col li.removed { color: var(--danger); text-decoration: line-through; }
+.reorg-col li.kept { color: var(--text); }
+.reorg-arrow { display: flex; align-items: center; justify-content: center; color: var(--text-soft); font-size: 20px; }
+
+.reorg-changes-title { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+.reorg-moves { max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+.reorg-move-row { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.reorg-move-row:last-child { border-bottom: none; }
+.reorg-move-row .title { font-weight: 600; color: var(--text); display: block; margin-bottom: 2px; }
+.reorg-move-row .from { color: var(--text-soft); }
+.reorg-move-row .to { color: var(--ok); font-weight: 600; }
+.reorg-move-row .arrow { color: var(--text-soft); margin: 0 6px; }
+.reorg-moves-empty { padding: 18px; text-align: center; color: var(--text-soft); font-size: 13px; }
+
+.reorg-footer { padding: 12px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+.reorg-footer button { padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); background: #fff; }
+.reorg-footer .primary-btn { border: none; background: var(--accent); color: #fff; font-weight: 600; }

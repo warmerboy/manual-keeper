@@ -91,7 +91,17 @@ CREATE TABLE IF NOT EXISTS meta (
 
 def init_schema(c: sqlite3.Connection) -> None:
     c.executescript(SCHEMA)
+    # 增量 schema 升级（ALTER TABLE，对老库幂等）
+    _ensure_column(c, "documents", "reorg_summary", "TEXT")
     c.commit()
+
+
+def _ensure_column(c: sqlite3.Connection, table: str, column: str, decl: str) -> None:
+    """SQLite 不支持 IF NOT EXISTS 的 ADD COLUMN，手动检查。"""
+    rows = c.execute(f"PRAGMA table_info({table})").fetchall()
+    cols = {r["name"] for r in rows}
+    if column not in cols:
+        c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
 
 def get_meta(key: str, default: str | None = None) -> str | None:
@@ -112,6 +122,32 @@ def list_subcategories(category: str) -> list[str]:
         (category,),
     ).fetchall()
     return sorted(r["subcategory"] for r in rows)
+
+
+def list_for_reorg() -> list[dict[str, Any]]:
+    """返回所有文档的最小信息，供一键重整使用。
+
+    优先用 reorg_summary（极简专用摘要），缺失时用 summary 兜底。
+    """
+    rows = conn().execute(
+        "SELECT id, title, category, subcategory, vendor, model, "
+        "       doc_type, summary, reorg_summary, original_name "
+        "FROM documents ORDER BY id"
+    ).fetchall()
+    out = []
+    for r in rows:
+        compact = (r["reorg_summary"] or r["summary"] or "").strip()
+        out.append({
+            "id": r["id"],
+            "title": r["title"] or r["original_name"] or "",
+            "category": r["category"],
+            "subcategory": r["subcategory"],
+            "vendor": r["vendor"],
+            "model": r["model"],
+            "doc_type": r["doc_type"],
+            "compact_summary": compact[:300],  # 硬上限防极端长摘要
+        })
+    return out
 
 
 def list_subcategories_grouped() -> dict[str, list[str]]:
@@ -172,16 +208,16 @@ def insert_document(data: dict[str, Any]) -> int:
             INSERT INTO documents
               (uuid, original_name, stored_path, mime, size, sha256,
                category, subcategory, vendor, model, doc_type,
-               title, summary, confidence, needs_review,
+               title, summary, reorg_summary, confidence, needs_review,
                created_at, updated_at, extracted_text)
-            VALUES (?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?,?)
+            VALUES (?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?)
             """,
             (
                 data["uuid"], data["original_name"], data["stored_path"],
                 data.get("mime"), data.get("size"), data.get("sha256"),
                 data.get("category"), data.get("subcategory"),
                 data.get("vendor"), data.get("model"), data.get("doc_type"),
-                data.get("title"), data.get("summary"),
+                data.get("title"), data.get("summary"), data.get("reorg_summary"),
                 data.get("confidence", 0), int(data.get("needs_review", 1)),
                 now, now, data.get("extracted_text"),
             ),
@@ -276,7 +312,8 @@ def get_document(doc_id: int) -> dict[str, Any] | None:
 def update_document(doc_id: int, fields: dict[str, Any]) -> bool:
     allowed = {
         "category", "subcategory", "vendor", "model", "doc_type",
-        "title", "summary", "confidence", "needs_review", "stored_path",
+        "title", "summary", "reorg_summary",
+        "confidence", "needs_review", "stored_path",
     }
     sets = []
     args: list[Any] = []

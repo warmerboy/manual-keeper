@@ -13,6 +13,7 @@
   <div class="brand">说明书保管箱</div>
   <input id="search-input" type="search" placeholder="搜索：标题 / 厂商 / 型号 / 内容 / 标签 ..." autocomplete="off">
   <div class="topbar-right">
+    <button id="btn-reorganize" class="chip-btn" title="让 AI 重新整理所有分类">✨ 一键重整</button>
     <button id="btn-review" class="chip-btn">待确认 <span id="review-count" class="badge">0</span></button>
     <button id="btn-upload" class="primary-btn">+ 上传文件</button>
     <input id="file-input" type="file" multiple hidden>
@@ -89,6 +90,57 @@
     <div class="modal-actions">
       <button id="e-cancel">取消</button>
       <button id="e-save" class="primary-btn">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 一键重整预览对话框 -->
+<div id="reorg-mask" hidden>
+  <div id="reorg-dialog">
+    <div class="reorg-header">
+      <h3>✨ 一键重整 — AI 整理方案</h3>
+      <button id="reorg-close-x" class="reorg-x">×</button>
+    </div>
+    <div id="reorg-body">
+      <div id="reorg-loading" class="reorg-state">
+        <div class="spinner"></div>
+        <p>AI 正在分析你的所有文档摘要，生成新的分类方案...</p>
+        <p class="reorg-sub">这一步只读取每份文档的极简摘要（不读原文），通常 10-30 秒</p>
+      </div>
+
+      <div id="reorg-error" class="reorg-state" hidden>
+        <p class="reorg-err">⚠ <span id="reorg-error-msg"></span></p>
+      </div>
+
+      <div id="reorg-result" hidden>
+        <div class="reorg-rationale">
+          <strong>AI 的整理思路：</strong><span id="reorg-rationale-text"></span>
+        </div>
+
+        <div class="reorg-cols">
+          <div class="reorg-col">
+            <div class="reorg-col-title">当前大类</div>
+            <ul id="reorg-cur-cats"></ul>
+          </div>
+          <div class="reorg-arrow">→</div>
+          <div class="reorg-col">
+            <div class="reorg-col-title">新大类</div>
+            <ul id="reorg-new-cats"></ul>
+          </div>
+        </div>
+
+        <div class="reorg-changes">
+          <div class="reorg-changes-title">
+            将要迁移的文档（<span id="reorg-moved-count">0</span> / <span id="reorg-total-count">0</span> 份）
+          </div>
+          <div id="reorg-moves" class="reorg-moves"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="reorg-actions" class="reorg-footer" hidden>
+      <button id="reorg-cancel">取消</button>
+      <button id="reorg-apply" class="primary-btn">应用</button>
     </div>
   </div>
 </div>

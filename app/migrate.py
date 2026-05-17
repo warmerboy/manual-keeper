@@ -55,8 +55,8 @@ def _map_old_to_new(old_category: str | None, old_subcategory: str | None) -> tu
     if not old_category:
         return taxonomy.UNCLASSIFIED, None
 
-    # 已经是 v2 的 5 个枚举之一 → 不动
-    if old_category in taxonomy.CATEGORIES:
+    # 已经是当前激活枚举之一 → 不动
+    if old_category in taxonomy.get_active_categories():
         sub = old_subcategory if old_category != taxonomy.UNCLASSIFIED else None
         return old_category, sub
 
@@ -106,7 +106,7 @@ def _cleanup_empty_dirs(root: Path) -> None:
     """递归删除 root 下的空目录（保留 root 自身和 5 个大类的顶层目录）。"""
     if not root.exists():
         return
-    keep_top = set(taxonomy.CATEGORIES)  # 5 个大类一级目录始终保留
+    keep_top = set(taxonomy.get_active_categories())  # 当前激活的大类一级目录始终保留
     # 自底向上扫描
     for path in sorted([p for p in root.rglob("*") if p.is_dir()], key=lambda p: -len(p.parts)):
         # 跳过 root 下一级的 5 个大类目录（即使为空也保留）

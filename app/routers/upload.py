@@ -57,6 +57,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
                 "doc_type": classified.get("doc_type"),
                 "title": classified.get("title") or (f.filename or ""),
                 "summary": classified.get("summary"),
+                "reorg_summary": classified.get("reorg_summary"),
                 "confidence": confidence,
                 "needs_review": needs_review,
                 "extracted_text": text,

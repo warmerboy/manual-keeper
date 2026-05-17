@@ -344,6 +344,113 @@ async function refreshReviewBadge() {
   } catch {}
 }
 
+/* ---- 一键重整 ---- */
+let _reorgProposal = null;
+
+async function openReorganize() {
+  $("reorg-mask").hidden = false;
+  $("reorg-loading").hidden = false;
+  $("reorg-error").hidden = true;
+  $("reorg-result").hidden = true;
+  $("reorg-actions").hidden = true;
+  _reorgProposal = null;
+  try {
+    const data = await api("/api/reorganize/preview", { method: "POST" });
+    _reorgProposal = data;
+    renderReorgPreview(data);
+    $("reorg-loading").hidden = true;
+    $("reorg-result").hidden = false;
+    $("reorg-actions").hidden = false;
+  } catch (e) {
+    $("reorg-loading").hidden = true;
+    $("reorg-error").hidden = false;
+    $("reorg-error-msg").textContent = e.message;
+  }
+}
+
+function renderReorgPreview(data) {
+  $("reorg-rationale-text").textContent = data.rationale || "(无)";
+
+  const curCats = data.current_categories || [];
+  const newCats = data.new_categories || [];
+  const added = new Set(data.diff?.categories_added || []);
+  const removed = new Set(data.diff?.categories_removed || []);
+
+  const curUl = $("reorg-cur-cats");
+  curUl.innerHTML = "";
+  curCats.forEach((c) => {
+    const li = document.createElement("li");
+    li.textContent = c;
+    li.className = removed.has(c) ? "removed" : "kept";
+    curUl.appendChild(li);
+  });
+
+  const newUl = $("reorg-new-cats");
+  newUl.innerHTML = "";
+  newCats.forEach((c) => {
+    const li = document.createElement("li");
+    li.textContent = c;
+    li.className = added.has(c) ? "added" : "kept";
+    newUl.appendChild(li);
+  });
+
+  $("reorg-moved-count").textContent = data.diff?.docs_moved_count ?? 0;
+  $("reorg-total-count").textContent = data.diff?.docs_total ?? 0;
+
+  const moves = $("reorg-moves");
+  moves.innerHTML = "";
+  const movedList = data.diff?.docs_moved || [];
+  if (!movedList.length) {
+    moves.innerHTML = '<div class="reorg-moves-empty">所有文档的位置都保持不变（AI 认为现状已经合理）</div>';
+  } else {
+    movedList.forEach((m) => {
+      const row = document.createElement("div");
+      row.className = "reorg-move-row";
+      row.innerHTML = `
+        <span class="title">${escapeHtml(m.title || `id=${m.doc_id}`)}</span>
+        <span class="from">${escapeHtml(m.from)}</span>
+        <span class="arrow">→</span>
+        <span class="to">${escapeHtml(m.to)}</span>
+      `;
+      moves.appendChild(row);
+    });
+  }
+}
+
+function closeReorganize() {
+  $("reorg-mask").hidden = true;
+  _reorgProposal = null;
+}
+
+async function applyReorganize() {
+  if (!_reorgProposal) return;
+  const btn = $("reorg-apply");
+  btn.disabled = true;
+  btn.textContent = "应用中...";
+  try {
+    const data = await api("/api/reorganize/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        new_categories: _reorgProposal.new_categories,
+        assignments: _reorgProposal.assignments,
+      }),
+    });
+    const errLine = data.errors?.length ? `\n(有 ${data.errors.length} 个错误)` : "";
+    toast(`✓ 重整完成，迁移 ${data.moved_files} 份文件${errLine}`, 8000);
+    closeReorganize();
+    // 重新加载分类常量缓存 + 树 + 列表
+    TAXONOMY = null;
+    await loadTree();
+    await loadList();
+  } catch (e) {
+    toast("应用失败：" + e.message, 8000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "应用";
+  }
+}
+
 /* ---- 工具 ---- */
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
@@ -357,6 +464,13 @@ window.addEventListener("DOMContentLoaded", () => {
   $("btn-upload").onclick = () => $("file-input").click();
   $("file-input").onchange = (e) => uploadFiles(e.target.files);
   $("btn-review").onclick = () => { setFilter({ type: "review" }); };
+  $("btn-reorganize").onclick = openReorganize;
+  $("reorg-cancel").onclick = closeReorganize;
+  $("reorg-close-x").onclick = closeReorganize;
+  $("reorg-apply").onclick = applyReorganize;
+  $("reorg-mask").addEventListener("click", (ev) => {
+    if (ev.target === $("reorg-mask")) closeReorganize();
+  });
 
   let searchTimer;
   $("search-input").addEventListener("input", (e) => {

@@ -16,15 +16,27 @@ from . import taxonomy
 
 def _build_system_prompt(known_subcategories: dict[str, list[str]]) -> str:
     """根据当前已有的细类拼系统提示词，引导 AI 收敛。"""
+    active = taxonomy.get_active_categories()
     lines = [
         "你是一个个人技术资料管理助手，负责识别用户上传文档的归类信息。",
         "",
-        "## 第一层大类（严格在以下 5 个中选 1 个，不可创造新大类）：",
-        "- **说明书**：设备、产品的使用手册 / 安装指南 / 技术规格（电气、家电、网络设备、摄影、音视频、工业、仪器等）",
-        "- **软件文档**：软件的用法 / 教程 / API 手册 / 开发文档",
-        "- **电子书**：小说、教材、工具书、漫画、杂志期刊、学术论文",
-        "- **规章制度**：国家法律、行政法规、行业标准、公司规章、社区物业规则、管理办法",
-        "- **待归档**：实在判断不出归属、或文档内容过于模糊（同时把 confidence 设到 0.4 以下）",
+        f"## 第一层大类（严格在以下 {len(active)} 个中选 1 个，不可创造新大类）：",
+    ]
+    # 兼容默认 5 个的描述；其他大类只给名字
+    desc_map = {
+        "说明书": "设备、产品的使用手册 / 安装指南 / 技术规格",
+        "软件文档": "软件的用法 / 教程 / API 手册 / 开发文档",
+        "电子书": "小说、教材、工具书、漫画、杂志期刊、学术论文",
+        "规章制度": "国家法律、行政法规、行业标准、公司规章、管理办法",
+        "待归档": "实在判断不出归属、或文档内容过于模糊（同时把 confidence 设到 0.4 以下）",
+    }
+    for cat in active:
+        desc = desc_map.get(cat, "")
+        if desc:
+            lines.append(f"- **{cat}**：{desc}")
+        else:
+            lines.append(f"- **{cat}**")
+    lines += [
         "",
         "## 第二层细类（subcategory）选择原则：",
         "- **绝对优先：复用下面列出的『已有细类』**。如果新文档能套进现有细类，必须用现有的名字，不要造近义词。",
@@ -35,11 +47,11 @@ def _build_system_prompt(known_subcategories: dict[str, list[str]]) -> str:
         "## 当前数据库里已有的细类（强烈建议复用）：",
     ]
     if known_subcategories:
-        for cat in taxonomy.CATEGORIES:
+        for cat in active:
             subs = known_subcategories.get(cat, [])
             if subs:
                 lines.append(f"- **{cat}**：{ '、'.join(subs) }")
-        if not any(known_subcategories.get(c) for c in taxonomy.CATEGORIES):
+        if not any(known_subcategories.get(c) for c in active):
             lines.append("（数据库目前为空，可以从建议清单中选）")
     else:
         lines.append("（数据库目前为空，可以从下方建议清单中选）")
@@ -48,7 +60,7 @@ def _build_system_prompt(known_subcategories: dict[str, list[str]]) -> str:
         "",
         "## 各大类的细类建议清单（仅在已有细类不合适时参考）：",
     ]
-    for cat in taxonomy.CATEGORIES:
+    for cat in active:
         suggested = taxonomy.SUGGESTED_SUBCATEGORIES.get(cat, [])
         if suggested:
             lines.append(f"- **{cat}**：{ '、'.join(suggested) }")
@@ -60,7 +72,8 @@ def _build_system_prompt(known_subcategories: dict[str, list[str]]) -> str:
         "- **model**（型号/版本/编号）：设备型号、软件版本、政策文号。无可填 null。",
         "- **doc_type**（文档类型）：例如『用户手册』『安装指南』『行业标准』『教程』『小说』。",
         "- **title**：清晰的中文标题。",
-        "- **summary**：1-3 句话概括文档内容和适用场景。",
+        "- **summary**：1-3 句话概括文档内容和适用场景（用户能看到）。",
+        "- **reorg_summary**：超极简一句话（不超过 50 字），形如『DJI Osmo Mobile 8 手持手机稳定器用户手册』，专门给系统做一键重整使用，要点是能让 AI 一眼看出这是『什么类型的什么东西』。用户看不到。",
         "- **tags**：3-8 个利于检索的关键词。",
         "- **confidence**：0-1，反映识别的把握。文档片段过短或看不出来时降到 0.4 以下。",
         "",
@@ -78,7 +91,7 @@ def _build_classify_tool() -> dict[str, Any]:
             "properties": {
                 "category": {
                     "type": "string",
-                    "enum": taxonomy.CATEGORIES,
+                    "enum": taxonomy.get_active_categories(),
                     "description": "一级大类，必须从给定枚举中选 1 个",
                 },
                 "subcategory": {
@@ -89,7 +102,12 @@ def _build_classify_tool() -> dict[str, Any]:
                 "model": {"type": ["string", "null"], "description": "型号 / 版本 / 编号；无填 null"},
                 "doc_type": {"type": ["string", "null"], "description": "文档类型，例如『用户手册』"},
                 "title": {"type": "string", "description": "清晰的中文标题"},
-                "summary": {"type": "string", "description": "1-3 句中文摘要"},
+                "summary": {"type": "string", "description": "1-3 句中文摘要（用户能看到）"},
+                "reorg_summary": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "description": "不超过 50 字的超极简一句话，专供系统重整使用，用户看不到",
+                },
                 "tags": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -99,7 +117,7 @@ def _build_classify_tool() -> dict[str, Any]:
                 },
                 "confidence": {"type": "number", "minimum": 0, "maximum": 1},
             },
-            "required": ["category", "title", "summary", "tags", "confidence"],
+            "required": ["category", "title", "summary", "reorg_summary", "tags", "confidence"],
         },
     }
 
@@ -107,8 +125,8 @@ def _build_classify_tool() -> dict[str, Any]:
 def _empty_result() -> dict[str, Any]:
     return {
         "category": None, "subcategory": None, "vendor": None, "model": None,
-        "doc_type": None, "title": None, "summary": None, "tags": [],
-        "confidence": 0.0,
+        "doc_type": None, "title": None, "summary": None, "reorg_summary": None,
+        "tags": [], "confidence": 0.0,
     }
 
 
