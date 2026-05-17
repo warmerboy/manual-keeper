@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,26 @@ def _get_cos_client():
 def _guess_content_type(filename: str) -> str:
     ct, _ = mimetypes.guess_type(filename)
     return ct or "application/octet-stream"
+
+
+def _upload_text(client, bucket: str, key: str, content: str, content_type: str) -> None:
+    """写入临时文件后用 upload_file 上传，确保 Content-Type 正确设置。"""
+    suffix = "." + key.rsplit(".", 1)[-1] if "." in key else ""
+    fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        client.upload_file(
+            Bucket=bucket,
+            Key=key,
+            LocalFilePath=tmp_path,
+            ContentType=content_type,
+        )
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 def _cos_key_for_doc(doc: dict[str, Any]) -> str:
@@ -127,28 +149,14 @@ def sync_to_cos() -> dict[str, Any]:
     manifest["password_hash"] = _password_hash()
     manifest_json = json.dumps(manifest, ensure_ascii=False, indent=2)
     try:
-        client.put_object(
-            Bucket=bucket,
-            Key="manifest.json",
-            Body=manifest_json.encode("utf-8"),
-            ContentType="application/json",
-            ContentDisposition="inline",
-            CacheControl="no-cache",
-        )
+        _upload_text(client, bucket, "manifest.json", manifest_json, "application/json")
     except Exception as e:
         errors.append(f"上传 manifest.json 失败：{e}")
 
     # 5. 上传访客页面
     try:
         viewer_html = VIEWER_TEMPLATE.read_text(encoding="utf-8")
-        client.put_object(
-            Bucket=bucket,
-            Key="index.html",
-            Body=viewer_html.encode("utf-8"),
-            ContentType="text/html",
-            ContentDisposition="inline",
-            CacheControl="no-cache",
-        )
+        _upload_text(client, bucket, "index.html", viewer_html, "text/html")
     except Exception as e:
         errors.append(f"上传 index.html 失败：{e}")
 

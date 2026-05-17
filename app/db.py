@@ -278,7 +278,7 @@ def list_documents(
     sql = (
         "SELECT id, uuid, original_name, stored_path, mime, size, "
         "category, subcategory, vendor, model, doc_type, title, summary, "
-        "confidence, needs_review, created_at, updated_at "
+        "confidence, needs_review, hidden, created_at, updated_at "
         "FROM documents WHERE 1=1"
     )
     args: list[Any] = []
@@ -359,7 +359,7 @@ def search_documents(query: str, limit: int = 100) -> list[dict[str, Any]]:
         """
         SELECT d.id, d.uuid, d.original_name, d.stored_path, d.mime, d.size,
                d.category, d.subcategory, d.vendor, d.model, d.doc_type,
-               d.title, d.summary, d.confidence, d.needs_review,
+               d.title, d.summary, d.confidence, d.needs_review, d.hidden,
                d.created_at, d.updated_at
         FROM documents_fts f
         JOIN documents d ON d.id = f.rowid
