@@ -26,7 +26,9 @@ async def upload_files(files: List[UploadFile] = File(...)):
             extracted = extract.extract(abs_path)
             text = extracted["text"]
 
-            classified = classify.classify_text(text, f.filename or "")
+            # v2：把现有细类喂给 AI，引导收敛
+            known_subs = db.list_subcategories_grouped()
+            classified = classify.classify_text(text, f.filename or "", known_subs)
             confidence = float(classified.get("confidence") or 0)
             has_meta = bool(classified.get("category"))
             needs_review = (not has_meta) or confidence < min_conf

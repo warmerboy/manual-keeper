@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from .. import db
 from ..models import DocumentUpdate
-from ..services import storage
+from ..services import storage, taxonomy
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -44,13 +44,26 @@ def update_doc(doc_id: int, body: DocumentUpdate):
     payload = body.model_dump(exclude_unset=True)
     tags = payload.pop("tags", None)
 
-    # 是否需要迁移文件
+    # 把 category 强制收敛到 5 个枚举（兼容历史脏数据）
+    if "category" in payload:
+        payload["category"] = taxonomy.normalize_category(payload["category"])
+    # 大类是"待归档"时清空细类
+    if payload.get("category") == taxonomy.UNCLASSIFIED:
+        payload["subcategory"] = None
+
     new_meta = {**doc, **payload}
+
+    # 是否需要迁移文件
     needs_review = new_meta.get("needs_review")
     if needs_review is None:
-        # 用户编辑后填了 category 则视为已确认
-        needs_review = not bool(new_meta.get("category"))
+        # 用户编辑后填了非"待归档"的大类就视为已确认
+        cat = new_meta.get("category")
+        needs_review = (not cat) or cat == taxonomy.UNCLASSIFIED
         payload["needs_review"] = needs_review
+    elif new_meta.get("category") == taxonomy.UNCLASSIFIED:
+        # 即使用户传了 needs_review=false，但选了待归档仍然算需要确认
+        needs_review = True
+        payload["needs_review"] = True
 
     new_rel = storage.move_to_classified(
         doc["stored_path"],

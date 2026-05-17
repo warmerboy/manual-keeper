@@ -42,10 +42,12 @@ function renderTree(tree) {
   allNode.onclick = () => setFilter({ type: "all" });
   root.appendChild(allNode);
 
+  // v2: 2 层（大类 → 细类）。count 为 0 的大类也展示，标灰
   tree.forEach((cat) => {
     const catEl = nodeEl(cat.name, cat.count);
     catEl.dataset.filterType = "category";
     catEl.dataset.filterValue = cat.name;
+    if (!cat.count) catEl.style.opacity = "0.45";
     catEl.onclick = (ev) => { ev.stopPropagation(); setFilter({ type: "category", value: cat.name }); };
     root.appendChild(catEl);
 
@@ -59,17 +61,6 @@ function renderTree(tree) {
         subEl.dataset.category = cat.name;
         subEl.onclick = (ev) => { ev.stopPropagation(); setFilter({ type: "subcategory", value: sub.name, parent: cat.name }); };
         subWrap.appendChild(subEl);
-
-        if (sub.children?.length) {
-          const venWrap = document.createElement("div");
-          venWrap.className = "tree-children";
-          sub.children.forEach((ven) => {
-            const venEl = nodeEl(ven.name, ven.count);
-            venEl.onclick = (ev) => { ev.stopPropagation(); setFilter({ type: "vendor", value: ven.name }); };
-            venWrap.appendChild(venEl);
-          });
-          subWrap.appendChild(venWrap);
-        }
       });
       root.appendChild(subWrap);
     }
@@ -202,8 +193,61 @@ async function showDetail(id) {
 const detail = {};
 
 /* ---- 编辑 ---- */
-function openEdit(doc) {
-  $("e-category").value = doc.category || "";
+let TAXONOMY = null; // { categories: [], unclassified: "待归档" }
+
+async function ensureTaxonomy() {
+  if (TAXONOMY) return TAXONOMY;
+  TAXONOMY = await api("/api/taxonomy/categories");
+  // 把 5 个大类填进 <select>
+  const sel = $("e-category");
+  sel.innerHTML = "";
+  TAXONOMY.categories.forEach((cat) => {
+    const opt = document.createElement("option");
+    opt.value = cat; opt.textContent = cat;
+    sel.appendChild(opt);
+  });
+  // 大类改变时刷新细类下拉
+  sel.onchange = () => refreshSubcategoryOptions(sel.value);
+  return TAXONOMY;
+}
+
+async function refreshSubcategoryOptions(category) {
+  const subInput = $("e-subcategory");
+  const datalist = $("subcategory-options");
+  datalist.innerHTML = "";
+  if (!category || category === TAXONOMY?.unclassified) {
+    subInput.value = "";
+    subInput.disabled = true;
+    subInput.placeholder = "「待归档」无细类";
+    return;
+  }
+  subInput.disabled = false;
+  subInput.placeholder = "点输入框可选已有项，也可自由输入新名";
+  try {
+    const { all } = await api(`/api/taxonomy/subcategories?category=${encodeURIComponent(category)}`);
+    (all || []).forEach((s) => {
+      const opt = document.createElement("option");
+      opt.value = s;
+      datalist.appendChild(opt);
+    });
+  } catch (e) { /* 静默 */ }
+}
+
+async function openEdit(doc) {
+  await ensureTaxonomy();
+
+  // 当前大类如果不在 5 个枚举中（迁移残留），先临时加进 <select>
+  const sel = $("e-category");
+  const targetCat = doc.category || TAXONOMY.categories[0];
+  if (![...sel.options].some(o => o.value === targetCat)) {
+    const opt = document.createElement("option");
+    opt.value = targetCat; opt.textContent = `${targetCat}（旧）`;
+    sel.appendChild(opt);
+  }
+  sel.value = targetCat;
+
+  await refreshSubcategoryOptions(targetCat);
+
   $("e-subcategory").value = doc.subcategory || "";
   $("e-vendor").value = doc.vendor || "";
   $("e-model").value = doc.model || "";

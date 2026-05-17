@@ -1,58 +1,107 @@
-"""调用 Claude API 自动识别文档元数据；缺 key / 缺文本时优雅降级。"""
+"""调用 Claude API 自动识别文档元数据。
+
+v2 收敛策略：
+- 大类锁死 5 个枚举（tool_use enum 协议层强制）
+- 把当前数据库里已用过的细类喂给 AI，引导它复用而非创造
+- 厂商 / 型号 / 文档类型作为元数据抽取，不参与目录
+"""
 from __future__ import annotations
 
 import json
 from typing import Any
 
 from ..config import CONFIG
+from . import taxonomy
 
-SYSTEM_PROMPT = """你是一个个人技术资料管理助手。用户上传的文档可能是：
-- 设备说明书（电气、机械、仪表、家电、网络设备等）
-- 软件使用文档（操作指南、教程、API 手册）
-- 政策法规 / 管理规定 / 标准规范
-- 生活类规定（社区规则、操作流程、注意事项）
 
-你的任务是阅读文档片段（标题、首页、目录、章节摘录），识别它的归类信息并调用 classify 工具返回结构化结果。
+def _build_system_prompt(known_subcategories: dict[str, list[str]]) -> str:
+    """根据当前已有的细类拼系统提示词，引导 AI 收敛。"""
+    lines = [
+        "你是一个个人技术资料管理助手，负责识别用户上传文档的归类信息。",
+        "",
+        "## 第一层大类（严格在以下 5 个中选 1 个，不可创造新大类）：",
+        "- **说明书**：设备、产品的使用手册 / 安装指南 / 技术规格（电气、家电、网络设备、摄影、音视频、工业、仪器等）",
+        "- **软件文档**：软件的用法 / 教程 / API 手册 / 开发文档",
+        "- **电子书**：小说、教材、工具书、漫画、杂志期刊、学术论文",
+        "- **规章制度**：国家法律、行政法规、行业标准、公司规章、社区物业规则、管理办法",
+        "- **待归档**：实在判断不出归属、或文档内容过于模糊（同时把 confidence 设到 0.4 以下）",
+        "",
+        "## 第二层细类（subcategory）选择原则：",
+        "- **绝对优先：复用下面列出的『已有细类』**。如果新文档能套进现有细类，必须用现有的名字，不要造近义词。",
+        "  例如已有「摄影摄像」就不要新建「摄像设备」「拍摄器材」；已有「家用电器」就不要新建「家电」。",
+        "- 如果实在找不到合适的已有细类，可以参考下方『建议清单』新建一个，名字要简洁通用。",
+        "- 选了大类「待归档」时，subcategory 填 null。",
+        "",
+        "## 当前数据库里已有的细类（强烈建议复用）：",
+    ]
+    if known_subcategories:
+        for cat in taxonomy.CATEGORIES:
+            subs = known_subcategories.get(cat, [])
+            if subs:
+                lines.append(f"- **{cat}**：{ '、'.join(subs) }")
+        if not any(known_subcategories.get(c) for c in taxonomy.CATEGORIES):
+            lines.append("（数据库目前为空，可以从建议清单中选）")
+    else:
+        lines.append("（数据库目前为空，可以从下方建议清单中选）")
 
-字段填写要求：
-- category（大类）：用中文短语，例如「电气设备」「机械设备」「软件文档」「政策法规」「生活规定」「网络设备」「仪表仪器」「家用电器」等。
-- subcategory（细类）：在大类下进一步细分，例如电气设备下分「PLC」「变频器」「断路器」；软件文档下分「办公软件」「开发工具」；政策法规下分「行业标准」「管理办法」。
-- vendor（厂商/发布方）：若是设备/软件填厂商；若是政策填发布机构；若无可填 null。
-- model（型号/版本/编号）：设备型号、软件版本、政策文号；无可填 null。
-- doc_type（文档类型）：例如「用户手册」「安装指南」「技术规格」「操作教程」「管理办法」「行业标准」「注意事项」。
-- title：清晰的中文标题，避免乱码。
-- summary：1-3 句话，概括这份资料讲什么，对什么场景有用。
-- tags：3-8 个对将来检索有帮助的关键词（设备名、功能词、应用场景等），用中文。
-- confidence：0-1 之间，反映你对识别准确性的信心。文档片段过短、内容看不出来时降到 0.4 以下。
+    lines += [
+        "",
+        "## 各大类的细类建议清单（仅在已有细类不合适时参考）：",
+    ]
+    for cat in taxonomy.CATEGORIES:
+        suggested = taxonomy.SUGGESTED_SUBCATEGORIES.get(cat, [])
+        if suggested:
+            lines.append(f"- **{cat}**：{ '、'.join(suggested) }")
 
-严格仅通过 classify 工具返回，不要输出额外文字。
-"""
+    lines += [
+        "",
+        "## 其他字段：",
+        "- **vendor**（厂商/发布方）：设备/软件填厂商名，政策填发布机构名，电子书填出版社/作者。无可填 null。同一厂商使用一致的名字（如『DJI』而不是『大疆』『大疆创新』『大疆创新科技有限公司』）。",
+        "- **model**（型号/版本/编号）：设备型号、软件版本、政策文号。无可填 null。",
+        "- **doc_type**（文档类型）：例如『用户手册』『安装指南』『行业标准』『教程』『小说』。",
+        "- **title**：清晰的中文标题。",
+        "- **summary**：1-3 句话概括文档内容和适用场景。",
+        "- **tags**：3-8 个利于检索的关键词。",
+        "- **confidence**：0-1，反映识别的把握。文档片段过短或看不出来时降到 0.4 以下。",
+        "",
+        "严格仅通过 classify 工具返回，不要输出额外文字。",
+    ]
+    return "\n".join(lines)
 
-CLASSIFY_TOOL = {
-    "name": "classify",
-    "description": "返回该文档的结构化分类与摘要。",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "category": {"type": "string", "description": "一级大类，中文短语"},
-            "subcategory": {"type": ["string", "null"], "description": "二级细类，中文短语；不确定填 null"},
-            "vendor": {"type": ["string", "null"], "description": "厂商/发布方；无填 null"},
-            "model": {"type": ["string", "null"], "description": "型号/版本/编号；无填 null"},
-            "doc_type": {"type": ["string", "null"], "description": "文档类型，例如『用户手册』"},
-            "title": {"type": "string", "description": "清晰的中文标题"},
-            "summary": {"type": "string", "description": "1-3 句中文摘要"},
-            "tags": {
-                "type": "array",
-                "items": {"type": "string"},
-                "minItems": 1,
-                "maxItems": 8,
-                "description": "3-8 个中文关键词标签"
+
+def _build_classify_tool() -> dict[str, Any]:
+    return {
+        "name": "classify",
+        "description": "返回该文档的结构化分类与摘要。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": taxonomy.CATEGORIES,
+                    "description": "一级大类，必须从给定枚举中选 1 个",
+                },
+                "subcategory": {
+                    "type": ["string", "null"],
+                    "description": "二级细类。优先复用『已有细类』中的名字。大类为『待归档』时填 null",
+                },
+                "vendor": {"type": ["string", "null"], "description": "厂商 / 发布方；无填 null"},
+                "model": {"type": ["string", "null"], "description": "型号 / 版本 / 编号；无填 null"},
+                "doc_type": {"type": ["string", "null"], "description": "文档类型，例如『用户手册』"},
+                "title": {"type": "string", "description": "清晰的中文标题"},
+                "summary": {"type": "string", "description": "1-3 句中文摘要"},
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "maxItems": 8,
+                    "description": "3-8 个中文关键词标签",
+                },
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
             },
-            "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+            "required": ["category", "title", "summary", "tags", "confidence"],
         },
-        "required": ["category", "title", "summary", "tags", "confidence"]
-    },
-}
+    }
 
 
 def _empty_result() -> dict[str, Any]:
@@ -63,16 +112,25 @@ def _empty_result() -> dict[str, Any]:
     }
 
 
-def classify_text(text: str, original_name: str) -> dict[str, Any]:
-    """根据抽取的文本调用 Claude；任何失败都返回空结果（不抛异常）。"""
+def classify_text(
+    text: str,
+    original_name: str,
+    known_subcategories: dict[str, list[str]] | None = None,
+) -> dict[str, Any]:
+    """根据抽取的文本调用 Claude；任何失败都返回空结果（不抛异常）。
+
+    known_subcategories: {大类: [已有细类...]}，用于引导 AI 复用现有分类。
+    """
     api_key = (CONFIG.get("anthropic_api_key") or "").strip()
     if not api_key:
         return _empty_result()
     if not text or len(text.strip()) < 20:
-        # 文本太少：仍可让 Claude 仅根据文件名猜，但传 file_name 帮助
         snippet = f"[文档抽取文本几乎为空，仅有文件名供参考]\n文件名：{original_name}"
     else:
         snippet = f"文件名：{original_name}\n\n--- 文档内容（已截断）---\n{text[:6000]}"
+
+    system_prompt = _build_system_prompt(known_subcategories or {})
+    classify_tool = _build_classify_tool()
 
     try:
         from anthropic import Anthropic
@@ -80,8 +138,8 @@ def classify_text(text: str, original_name: str) -> dict[str, Any]:
         resp = client.messages.create(
             model=CONFIG.get("model", "claude-haiku-4-5"),
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
-            tools=[CLASSIFY_TOOL],
+            system=system_prompt,
+            tools=[classify_tool],
             tool_choice={"type": "tool", "name": "classify"},
             messages=[{"role": "user", "content": snippet}],
         )
@@ -92,7 +150,6 @@ def classify_text(text: str, original_name: str) -> dict[str, Any]:
     for block in resp.content:
         if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == "classify":
             data = block.input or {}
-            # 容错：如果模型把 JSON 编码成字符串
             if isinstance(data, str):
                 try:
                     data = json.loads(data)
@@ -102,7 +159,11 @@ def classify_text(text: str, original_name: str) -> dict[str, Any]:
             for k in result:
                 if k in data and data[k] is not None:
                     result[k] = data[k]
-            # tags 必须是 list[str]
+            # 大类兜底：强制收敛到 5 个枚举
+            result["category"] = taxonomy.normalize_category(result.get("category"))
+            # 待归档下不应有细类
+            if result["category"] == taxonomy.UNCLASSIFIED:
+                result["subcategory"] = None
             if not isinstance(result["tags"], list):
                 result["tags"] = []
             result["tags"] = [str(t).strip() for t in result["tags"] if str(t).strip()]

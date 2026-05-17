@@ -81,12 +81,49 @@ CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
     title, summary, extracted_text, original_name, vendor, model, tags_concat,
     tokenize = 'unicode61 remove_diacritics 2'
 );
+
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
 
 def init_schema(c: sqlite3.Connection) -> None:
     c.executescript(SCHEMA)
     c.commit()
+
+
+def get_meta(key: str, default: str | None = None) -> str | None:
+    row = conn().execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_meta(key: str, value: str) -> None:
+    with tx() as c:
+        c.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (key, value))
+
+
+def list_subcategories(category: str) -> list[str]:
+    """返回某大类下数据库里实际用过的细类（去重排序）。"""
+    rows = conn().execute(
+        "SELECT DISTINCT subcategory FROM documents "
+        "WHERE category=? AND subcategory IS NOT NULL AND subcategory<>''",
+        (category,),
+    ).fetchall()
+    return sorted(r["subcategory"] for r in rows)
+
+
+def list_subcategories_grouped() -> dict[str, list[str]]:
+    """返回 {大类: [已用过的细类...]}，供 AI 收敛提示词使用。"""
+    rows = conn().execute(
+        "SELECT DISTINCT category, subcategory FROM documents "
+        "WHERE category IS NOT NULL AND subcategory IS NOT NULL AND subcategory<>''"
+    ).fetchall()
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        out.setdefault(r["category"], []).append(r["subcategory"])
+    return {k: sorted(set(v)) for k, v in out.items()}
 
 
 def _now() -> str:
@@ -300,24 +337,20 @@ def search_documents(query: str, limit: int = 100) -> list[dict[str, Any]]:
 
 
 def category_tree() -> dict[str, Any]:
-    """返回嵌套字典：{大类: {细类: {厂商: {型号: count}}}}，特殊键 __count 表示该层文档数。"""
+    """返回 2 层嵌套：{大类: {__count, children: {细类: count}}}。"""
     rows = conn().execute(
-        "SELECT category, subcategory, vendor, model, COUNT(*) AS n "
-        "FROM documents GROUP BY category, subcategory, vendor, model"
+        "SELECT category, subcategory, COUNT(*) AS n "
+        "FROM documents GROUP BY category, subcategory"
     ).fetchall()
     tree: dict[str, Any] = {}
     for r in rows:
-        cat = r["category"] or "_unclassified"
-        sub = r["subcategory"] or "_other"
-        ven = r["vendor"] or "_other"
-        mod = r["model"] or "_other"
+        cat = r["category"] or "待归档"
+        sub = r["subcategory"]
         n = r["n"]
         tree.setdefault(cat, {"__count": 0, "children": {}})
         tree[cat]["__count"] += n
-        tree[cat]["children"].setdefault(sub, {"__count": 0, "children": {}})
-        tree[cat]["children"][sub]["__count"] += n
-        tree[cat]["children"][sub]["children"].setdefault(ven, {"__count": 0, "children": {}})
-        tree[cat]["children"][sub]["children"][ven]["__count"] += n
-        tree[cat]["children"][sub]["children"][ven]["children"].setdefault(mod, 0)
-        tree[cat]["children"][sub]["children"][ven]["children"][mod] += n
+        # 没有细类时（如待归档），不在 children 里加项；细类显示完全由前端控制
+        if sub:
+            tree[cat]["children"].setdefault(sub, 0)
+            tree[cat]["children"][sub] += n
     return tree

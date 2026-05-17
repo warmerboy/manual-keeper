@@ -41,7 +41,8 @@ def storage_root() -> Path:
         p = ROOT / p
     p.mkdir(parents=True, exist_ok=True)
     (p / "files").mkdir(exist_ok=True)
-    (p / "files" / "_unclassified").mkdir(exist_ok=True)
+    # v2: 用『待归档』替代旧的 _unclassified
+    (p / "files" / "待归档").mkdir(exist_ok=True)
     return p
 
 

@@ -68,11 +68,18 @@
   <div id="modal-edit">
     <h3>编辑分类与标签</h3>
     <div class="form-grid">
-      <label>大类<input id="e-category"></label>
-      <label>细类<input id="e-subcategory"></label>
-      <label>厂商 / 发布方<input id="e-vendor"></label>
-      <label>型号 / 版本<input id="e-model"></label>
-      <label>文档类型<input id="e-doc_type"></label>
+      <label>大类
+        <select id="e-category">
+          <!-- 选项由 app.js 注入 -->
+        </select>
+      </label>
+      <label>细类（可选下拉或自由输入）
+        <input id="e-subcategory" list="subcategory-options" autocomplete="off">
+        <datalist id="subcategory-options"></datalist>
+      </label>
+      <label>厂商 / 发布方<input id="e-vendor" placeholder="如有可填"></label>
+      <label>型号 / 版本<input id="e-model" placeholder="如有可填"></label>
+      <label class="span-2">文档类型<input id="e-doc_type" placeholder="如『用户手册』『行业标准』『小说』"></label>
       <label class="span-2">标题<input id="e-title"></label>
       <label class="span-2">摘要<textarea id="e-summary" rows="3"></textarea></label>
       <label class="span-2">标签（逗号或空格分隔）<input id="e-tags"></label>
