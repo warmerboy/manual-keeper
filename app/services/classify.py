@@ -152,7 +152,8 @@ def classify_text(
 
     try:
         from anthropic import Anthropic
-        client = Anthropic(api_key=api_key)
+        base_url = (CONFIG.get("anthropic_base_url") or "").strip() or None
+        client = Anthropic(api_key=api_key, base_url=base_url)
         resp = client.messages.create(
             model=CONFIG.get("model", "claude-haiku-4-5"),
             max_tokens=1024,

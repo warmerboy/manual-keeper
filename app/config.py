@@ -7,6 +7,7 @@ from typing import Any
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "anthropic_api_key": "",
+    "anthropic_base_url": "",
     "model": "claude-haiku-4-5",
     "port": 8765,
     "storage_dir": "./storage",
