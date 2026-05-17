@@ -210,3 +210,4 @@ main {
 /* ---- 隐藏文档样式 ---- */
 .card.hidden-doc { opacity: 0.5; }
 .tag.hidden-tag { background: #f3f4f6; color: #6b7280; }
+.hidden-flag { display: inline-block; background: #fef2f2; color: #dc2626; font-size: 12px; padding: 3px 10px; border-radius: 6px; font-weight: 500; }

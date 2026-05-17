@@ -228,8 +228,15 @@ async function showDetail(id) {
       preview.innerHTML = `<img src="${url}" alt="">`;
     } else if (mime === "application/pdf" || (doc.original_name || "").toLowerCase().endsWith(".pdf")) {
       preview.innerHTML = `<iframe src="${url}#zoom=page-width"></iframe>`;
-    } else if (mime.startsWith("text/") || /\.(md|markdown|txt|log|csv|tsv|html?|json)$/i.test(doc.original_name || "")) {
+    } else if (mime === "text/html" || /\.html?$/i.test(doc.original_name || "")) {
       preview.innerHTML = `<iframe src="${url}"></iframe>`;
+    } else if (mime.startsWith("text/") || /\.(md|markdown|txt|log|csv|tsv|json)$/i.test(doc.original_name || "")) {
+      preview.innerHTML = `<div class="text-preview">加载中...</div>`;
+      fetch(url).then(r => r.ok ? r.text() : Promise.reject("加载失败")).then(text => {
+        preview.innerHTML = `<div class="text-preview">${escapeHtml(text.slice(0, 50000))}</div>`;
+      }).catch(() => {
+        preview.innerHTML = `<div class="text-preview">文本加载失败</div>`;
+      });
     } else {
       preview.innerHTML = `<div class="text-preview">此格式无法在网页中预览，点击右上角『下载』查看。</div>`;
     }
@@ -241,6 +248,9 @@ async function showDetail(id) {
     const hideBtn = $("d-hide");
     hideBtn.textContent = doc.hidden ? "取消隐藏" : "隐藏";
     hideBtn.title = doc.hidden ? "取消隐藏，下次同步时会上传到分享平台" : "隐藏后不会同步到分享平台";
+    // 详情区隐藏状态标记
+    const hiddenFlag = $("d-hidden-flag");
+    hiddenFlag.hidden = !doc.hidden;
     detail._doc = doc;
   } catch (e) { toast(e.message); }
 }
