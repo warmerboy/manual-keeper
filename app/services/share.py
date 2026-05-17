@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,11 @@ def _get_cos_client():
         SecretKey=CONFIG["cos_secret_key"],
     )
     return CosS3Client(config)
+
+
+def _guess_content_type(filename: str) -> str:
+    ct, _ = mimetypes.guess_type(filename)
+    return ct or "application/octet-stream"
 
 
 def _cos_key_for_doc(doc: dict[str, Any]) -> str:
@@ -86,11 +92,13 @@ def sync_to_cos() -> dict[str, Any]:
             errors.append(f"文件不存在：{doc['original_name']}")
             continue
         cos_key = _cos_key_for_doc(doc)
+        content_type = doc.get("mime") or _guess_content_type(doc["original_name"])
         try:
             client.upload_file(
                 Bucket=bucket,
                 Key=cos_key,
                 LocalFilePath=str(local_path),
+                ContentType=content_type,
             )
             synced_ids.append(doc["id"])
             uploaded += 1
@@ -123,7 +131,9 @@ def sync_to_cos() -> dict[str, Any]:
             Bucket=bucket,
             Key="manifest.json",
             Body=manifest_json.encode("utf-8"),
-            ContentType="application/json; charset=utf-8",
+            ContentType="application/json",
+            ContentDisposition="inline",
+            CacheControl="no-cache",
         )
     except Exception as e:
         errors.append(f"上传 manifest.json 失败：{e}")
@@ -135,7 +145,9 @@ def sync_to_cos() -> dict[str, Any]:
             Bucket=bucket,
             Key="index.html",
             Body=viewer_html.encode("utf-8"),
-            ContentType="text/html; charset=utf-8",
+            ContentType="text/html",
+            ContentDisposition="inline",
+            CacheControl="no-cache",
         )
     except Exception as e:
         errors.append(f"上传 index.html 失败：{e}")
