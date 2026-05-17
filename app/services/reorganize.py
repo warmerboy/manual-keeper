@@ -251,7 +251,7 @@ def apply(proposal: dict[str, Any]) -> dict[str, Any]:
 
 
 def rollback() -> dict[str, Any]:
-    """从上次快照回滚。"""
+    """从上次快照回滚。**消费式**：成功后清空快照，避免误操作连续回退。"""
     raw = db.get_meta(REORG_SNAPSHOT_KEY)
     if not raw:
         return {"ok": False, "reason": "没有可回滚的快照"}
@@ -278,4 +278,7 @@ def rollback() -> dict[str, Any]:
             "stored_path": str(new_rel).replace("\\", "/"),
         })
         moved += 1
-    return {"ok": True, "moved_files": moved}
+
+    # 消费快照：避免连续回退
+    db.set_meta(REORG_SNAPSHOT_KEY, "")
+    return {"ok": True, "moved_files": moved, "restored_at": snap.get("saved_at")}

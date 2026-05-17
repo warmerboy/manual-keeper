@@ -347,6 +347,36 @@ async function refreshReviewBadge() {
 /* ---- 一键重整 ---- */
 let _reorgProposal = null;
 
+async function refreshReorgStatus() {
+  try {
+    const data = await api("/api/reorganize/status");
+    const btn = $("btn-undo-reorg");
+    if (data.has_snapshot) {
+      btn.hidden = false;
+      const ts = data.snapshot_saved_at || "";
+      btn.title = `回退上次重整（备份于 ${ts}，含 ${data.doc_count || 0} 份文档）`;
+    } else {
+      btn.hidden = true;
+    }
+  } catch (e) { /* 静默：状态查询失败不打扰 */ }
+}
+
+async function undoReorganize() {
+  if (!confirm("确定回退到上次重整前的状态吗？所有文件会迁回原位，新建的大类会消失。\n\n回退只能进行一次（成功后快照消费掉）。")) {
+    return;
+  }
+  try {
+    const data = await api("/api/reorganize/rollback", { method: "POST" });
+    toast(`✓ 已回退，复原 ${data.moved_files} 份文件`);
+    TAXONOMY = null;
+    await loadTree();
+    await loadList();
+    await refreshReorgStatus();
+  } catch (e) {
+    toast("回退失败：" + e.message);
+  }
+}
+
 async function openReorganize() {
   $("reorg-mask").hidden = false;
   $("reorg-loading").hidden = false;
@@ -443,6 +473,7 @@ async function applyReorganize() {
     TAXONOMY = null;
     await loadTree();
     await loadList();
+    await refreshReorgStatus();  // 让回退按钮显现
   } catch (e) {
     toast("应用失败：" + e.message, 8000);
   } finally {
@@ -465,9 +496,11 @@ window.addEventListener("DOMContentLoaded", () => {
   $("file-input").onchange = (e) => uploadFiles(e.target.files);
   $("btn-review").onclick = () => { setFilter({ type: "review" }); };
   $("btn-reorganize").onclick = openReorganize;
+  $("btn-undo-reorg").onclick = undoReorganize;
   $("reorg-cancel").onclick = closeReorganize;
   $("reorg-close-x").onclick = closeReorganize;
   $("reorg-apply").onclick = applyReorganize;
+  refreshReorgStatus(); // 启动时查一次，决定回退按钮显隐
   $("reorg-mask").addEventListener("click", (ev) => {
     if (ev.target === $("reorg-mask")) closeReorganize();
   });

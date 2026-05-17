@@ -1,12 +1,33 @@
-"""一键重整 API：预览 / 应用 / 回滚。"""
+"""一键重整 API：状态 / 预览 / 应用 / 回滚。"""
 from __future__ import annotations
+
+import json
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from .. import db
 from ..services import reorganize
 
 router = APIRouter(prefix="/api/reorganize", tags=["reorganize"])
+
+
+@router.get("/status")
+def status():
+    """查询是否有可回退的快照，给 UI 决定是否显示回退按钮。"""
+    raw = db.get_meta(reorganize.REORG_SNAPSHOT_KEY)
+    if not raw:
+        return {"has_snapshot": False}
+    try:
+        snap = json.loads(raw)
+    except Exception:
+        return {"has_snapshot": False}
+    return {
+        "has_snapshot": True,
+        "snapshot_saved_at": snap.get("saved_at"),
+        "last_reorg_at": db.get_meta(reorganize.LAST_REORG_AT_KEY),
+        "doc_count": len(snap.get("documents", [])),
+    }
 
 
 class ApplyBody(BaseModel):
